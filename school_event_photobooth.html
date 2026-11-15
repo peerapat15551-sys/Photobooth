@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School Event Photobooth - เปิดบ้านสตรีพัทลุง SPT OPENHOUSE 2027</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- QRCode.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Kanit:wght@300;400;500;600;700;800&family=Prompt:wght@500;700;800&display=swap" rel="stylesheet">
+
+  <!-- Firebase SDKs for Built-in Cloud Album (Private Student ID Lookup) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.SptCloudAlbum = {
+      ready: false,
+      db: null,
+      auth: null,
+      user: null,
+      appId: typeof __app_id !== 'undefined' ? __app_id : 'spt-openhouse-2027',
+      async init() {
+        try {
+          if (typeof __firebase_config === 'undefined' || !__firebase_config) return false;
+          const firebaseConfig = JSON.parse(__firebase_config);
+          const app = initializeApp(firebaseConfig);
+          this.auth = getAuth(app);
+          this.db = getFirestore(app);
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(this.auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(this.auth);
+          }
+          this.user = this.auth.currentUser;
+          this.ready = Boolean(this.user);
+          return this.ready;
+        } catch (err) {
+          console.warn('Built-in Cloud Album fallback:', err);
+          return false;
+        }
+      },
+      async savePhoto(record) {
+        if (!this.ready) await this.init();
+        if (!this.ready || !this.user) return false;
+        try {
+          const docId = record.uid || `${record.code}_${record.createdAt || Date.now()}`;
+          const ref = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'spt_album_2027', docId);
+          await setDoc(ref, {
+            uid: docId,
+            code: record.code,
+            studentId: (record.studentId || '').trim(),
+            dataUrl: record.dataUrl,
+            cloudUrl: record.cloudUrl || '',
+            timestamp: record.timestamp || '',
+            createdAt: record.createdAt || Date.now(),
+            room: record.room || 'SPT-OPENHOUSE-2027'
+          });
+          return true;
+        } catch (e) {
+          console.warn('Cloud save error:', e);
+          return false;
+        }
+      },
+      subscribeAll(onUpdate) {
+        if (!this.ready || !this.user) return null;
+        const colRef = collection(this.db, 'artifacts', this.appId, 'public', 'data', 'spt_album_2027');
+        return onSnapshot(colRef, (snapshot) => {
+          const list = [];
+          snapshot.forEach((docSnap) => list.push(docSnap.data()));
+          list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          onUpdate(list);
+        }, (err) => {
+          console.warn('Cloud Album snapshot error:', err);
+        });
+      }
+    };
+    window.dispatchEvent(new Event('spt-cloud-album-ready'));
+  </script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Kanit', 'sans-serif'],
+            display: ['Prompt', 'Kanit', 'sans-serif'],
+            tech: ['Chakra Petch', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      font-family: 'Kanit', sans-serif;
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 45%, #f8fafc 100%);
+      color: #0f172a;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+    }
+    .qr-safe-box {
+      background: #ffffff;
+      padding: 10px;
+      border-radius: 16px;
+      border: 2px solid #dbeafe;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.05);
+    }
+    .qr-safe-box img,
+    .qr-safe-box canvas {
+      display: block !important;
+      margin: 0 auto !important;
+      max-width: 100% !important;
+      height: auto !important;
+    }
+    @keyframes flashBurst {
+      0% { opacity: 0.95; }
+      100% { opacity: 0; }
+    }
+    .flash-active {
+      animation: flashBurst 0.45s ease-out forwards;
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+  </style>
+</head>
+<body class="min-h-screen lg:h-screen lg:overflow-hidden flex flex-col select-none">
+
+  <!-- Camera Flash Overlay -->
+  <div id="flash-overlay" class="fixed inset-0 bg-white pointer-events-none opacity-0 z-50"></div>
+
+  <!-- ===================================================================== -->
+  <!-- TOP NAVIGATION HEADER                                                 -->
+  <!-- ===================================================================== -->
+  <header class="bg-white/95 backdrop-blur-md border-b border-blue-100 px-3 sm:px-5 py-2.5 shrink-0 z-30 shadow-2xs">
+    <div class="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-2">
+      <!-- Brand Title -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-md shadow-blue-600/20">
+          <i data-lucide="aperture" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-display font-extrabold text-sm sm:text-base text-slate-900 leading-none">
+              SPT Photobooth 2027
+            </h1>
+            <span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold tracking-wide">
+              เปิดบ้านสตรีพัทลุง
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5 hidden sm:block">
+            ระบบถ่ายภาพงานโรงเรียน • คลังอัลบั้มรับรูปส่วนบุคคล
+          </p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher & Monitor Station Controls -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div class="bg-blue-50/90 p-1 rounded-xl border border-blue-200/80 flex items-center gap-1">
+          <button id="nav-booth-btn" type="button" onclick="switchAppMode('booth')" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-blue-600 text-white shadow-xs transition cursor-pointer">
+            <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+            <span>จุดถ่ายภาพ</span>
+          </button>
+          <button id="nav-album-btn" type="button" onclick="switchAppMode('album')" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 text-blue-700 hover:bg-blue-100 transition cursor-pointer">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+            <span>อัลบั้มรับรูป (รหัส นร.)</span>
+          </button>
+          <button id="nav-monitor-btn" type="button" onclick="switchAppMode('monitor')" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 text-blue-700 hover:bg-blue-100 transition cursor-pointer">
+            <i data-lucide="monitor" class="w-3.5 h-3.5"></i>
+            <span>จอ Monitor</span>
+            <span id="gallery-count-badge" class="px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px]">0</span>
+          </button>
+        </div>
+
+        <button type="button" onclick="openSeparateAlbumWindow()" title="เปิดหน้าต่างอัลบั้มรับรูปแยกสำหรับนักเรียน" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold shadow-2xs transition cursor-pointer">
+          <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+          <span>เปิดหน้าต่างอัลบั้มแยก</span>
+        </button>
+
+        <button type="button" onclick="openSeparateMonitorWindow()" title="เปิดจอ Monitor แสดงรูปล่าสุดแยก" class="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition cursor-pointer">
+          <i data-lucide="tv" class="w-3.5 h-3.5"></i>
+          <span>จอ Monitor แยก</span>
+        </button>
+
+        <button type="button" onclick="openCloudSettingsModal()" title="ตั้งค่าลิงก์เว็บ & ห้องงาน" class="p-2 rounded-xl bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-blue-100 transition cursor-pointer">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- VIEW 1: SINGLE-SCREEN 100VH PHOTOBOOTH STUDIO                         -->
+  <!-- ===================================================================== -->
+  <main id="booth-view" class="flex-1 w-full max-w-[1680px] mx-auto p-2.5 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:overflow-hidden">
+
+    <!-- LEFT COLUMN: LIVE CAMERA & SHUTTER CONTROLS (7 Cols) -->
+    <div class="lg:col-span-7 flex flex-col gap-2.5 h-full min-h-0">
+      <!-- Camera Top Controls Bar -->
+      <div class="glass-card rounded-2xl px-3 py-2 border border-blue-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-bold">
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> LIVE
+          </span>
+          <select id="camera-select" onchange="startCameraStream(this.value)" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-semibold text-slate-800 max-w-[180px] sm:max-w-[230px] truncate focus:outline-none">
+            <option value="">กำลังค้นหากล้อง...</option>
+          </select>
+          <button type="button" onclick="refreshCameraDevices()" title="รีเฟรชรายชื่อกล้อง" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button id="mirror-toggle-btn" type="button" onclick="toggleCameraMirror()" class="px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1 cursor-pointer">
+            <i data-lucide="flip-horizontal" class="w-3.5 h-3.5"></i>
+            <span>กลับด้าน</span>
+          </button>
+          <select id="timer-select" onchange="APP_STATE.timerSec = parseInt(this.value, 10)" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 cursor-pointer">
+            <option value="3">⏱️ 3 วินาที</option>
+            <option value="5">⏱️ 5 วินาที</option>
+            <option value="1">⚡ 1 วินาที</option>
+          </select>
+          <span id="next-code-pill" class="px-2.5 py-1 rounded-xl bg-slate-900 text-white font-mono text-xs font-bold">
+            SPT-001
+          </span>
+        </div>
+      </div>
+
+      <!-- Camera Viewport Frame -->
+      <div class="relative flex-1 min-h-[260px] bg-slate-950 rounded-3xl overflow-hidden border-2 border-blue-200/80 shadow-lg flex items-center justify-center">
+        <video id="camera-video" autoplay playsinline muted class="w-full h-full object-cover scale-x-[-1] transition-all duration-200"></video>
+        <canvas id="demo-canvas" class="hidden w-full h-full object-cover"></canvas>
+
+        <!-- Camera Fallback Overlay -->
+        <div id="camera-fallback" class="absolute inset-0 bg-slate-900/90 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center text-white z-10">
+          <div class="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-400/40 flex items-center justify-center mb-3 text-blue-300">
+            <i data-lucide="camera-off" class="w-7 h-7"></i>
+          </div>
+          <h3 class="font-display font-bold text-base sm:text-lg">ยังไม่พบสัญญาณกล้องหรือรอการอนุญาต</h3>
+          <p class="text-xs text-slate-300 max-w-sm mt-1 mb-4">
+            เลือกกล้องจากเมนูด้านบน (Webcam, Capture Card, Camo, Iriun) หรือเปิดโหมดจำลองภาพเพื่อทดสอบได้ทันที
+          </p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <button type="button" onclick="startCameraStream()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow cursor-pointer">
+              🔌 ลองเชื่อมต่อกล้อง
+            </button>
+            <button type="button" onclick="activateDemoCamera()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold cursor-pointer">
+              🎭 โหมดจำลองภาพ (Demo)
+            </button>
+          </div>
+        </div>
+
+        <!-- Countdown Overlay -->
+        <div id="countdown-overlay" class="hidden absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] flex flex-col items-center justify-center z-20 pointer-events-none">
+          <span id="countdown-shot-label" class="px-3.5 py-1 rounded-full bg-blue-600 text-white text-xs font-extrabold shadow-lg mb-2">
+            ช็อตที่ 1 / 4
+          </span>
+          <div id="countdown-num" class="text-7xl sm:text-8xl font-display font-black text-white drop-shadow-[0_6px_24px_rgba(0,0,0,0.85)]">
+            3
+          </div>
+        </div>
+
+        <!-- Live Captured Mini Strip Overlay -->
+        <div id="mini-shots-bar" class="absolute bottom-3 left-3 right-3 grid grid-cols-4 gap-2 z-10 pointer-events-none"></div>
+      </div>
+
+      <!-- Bottom Action Control Deck -->
+      <div class="glass-card rounded-2xl p-2.5 sm:p-3 border border-blue-200/80 shadow-md shrink-0">
+        <div class="flex flex-wrap items-end gap-2.5">
+          <!-- Step 1: Layout / Shot Count -->
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-blue-700 px-1">1. รูปแบบ / จำนวนภาพ</span>
+            <div class="grid grid-cols-4 gap-1 bg-blue-50 p-1 rounded-xl border border-blue-200/70">
+              <button type="button" data-layout="strip4" onclick="setPhotoboothLayout('strip4')" class="layout-choice px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold bg-blue-600 text-white shadow-2xs cursor-pointer">
+                4 แถว
+              </button>
+              <button type="button" data-layout="strip3" onclick="setPhotoboothLayout('strip3')" class="layout-choice px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-slate-700 hover:bg-white cursor-pointer">
+                3 แถว
+              </button>
+              <button type="button" data-layout="grid2x2" onclick="setPhotoboothLayout('grid2x2')" class="layout-choice px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-slate-700 hover:bg-white cursor-pointer">
+                2×2
+              </button>
+              <button type="button" data-layout="single" onclick="setPhotoboothLayout('single')" class="layout-choice px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-slate-700 hover:bg-white cursor-pointer">
+                1 รูป
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 2: Student ID Tag (Required) -->
+          <div class="flex flex-col gap-1 flex-1 min-w-[185px]">
+            <div class="flex items-center justify-between px-1">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-rose-600">2. รหัสนักเรียน (บังคับกรอก)*</span>
+              <label class="inline-flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer">
+                <input id="auto-clear-sid-checkbox" type="checkbox" checked class="rounded accent-blue-600" />
+                <span>ล้างหลังถ่าย</span>
+              </label>
+            </div>
+            <div class="relative">
+              <input id="student-id-input" type="text" required maxlength="20" placeholder="ต้องกรอกรหัส นร. เช่น 67105" oninput="this.classList.remove('border-rose-500','ring-2','ring-rose-400','bg-rose-50'); this.classList.add('border-blue-300','bg-white')" class="w-full px-3 py-1.5 rounded-xl bg-white border-2 border-blue-300 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+              <button type="button" onclick="document.getElementById('student-id-input').value=''" title="ล้างข้อความ" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Primary Shutter Button -->
+          <div class="flex items-center gap-1.5 w-full sm:w-auto">
+            <button id="shutter-btn" type="button" onclick="startPhotoboothCapture()" class="flex-1 sm:flex-initial py-2.5 px-5 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98] text-white font-display font-extrabold text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition cursor-pointer">
+              <i data-lucide="camera" class="w-4 h-4"></i>
+              <span id="shutter-btn-text">ถ่ายภาพ (4 รูป)</span>
+            </button>
+            <button type="button" onclick="resetCurrentShots()" title="ล้างภาพรอบนี้" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: DECORATION & LIVE STRIP + QR DOWNLOAD (5 Cols) -->
+    <div class="lg:col-span-5 flex flex-col gap-2.5 h-full min-h-0">
+
+      <!-- Quick Decoration Bar -->
+      <div class="glass-card rounded-2xl p-2.5 border border-blue-100 shrink-0 space-y-2">
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">🎨 ธีมกรอบ</label>
+            <select id="theme-select" onchange="setFrameTheme(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs font-bold text-slate-800 cursor-pointer">
+              <option value="sptBlue">💙🤍 สตรีพัทลุง 2027</option>
+              <option value="cleanWhite">🤍 ขาวคลีนมินิมอล</option>
+              <option value="pastelSky">🩵 ฟ้าพาสเทล</option>
+              <option value="vintageCream">🎞️ ฟิล์มครีมวินเทจ</option>
+              <option value="darkGold">🖤 ดำทองพรีเมียม</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">✨ ฟิลเตอร์สี</label>
+            <select id="filter-select" onchange="setCameraFilter(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs font-bold text-slate-800 cursor-pointer">
+              <option value="none">ปกติ (สดใส)</option>
+              <option value="bright">หน้าใสเกาหลี</option>
+              <option value="warm">ฟิล์มอบอุ่น</option>
+              <option value="bw">ขาวดำคลาสสิก</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">🧸 สติกเกอร์</label>
+            <select id="sticker-select" onchange="setStickerPack(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs font-bold text-slate-800 cursor-pointer">
+              <option value="none">ไม่มีสติกเกอร์</option>
+              <option value="sptHearts">💙🤍 หัวใจน้ำเงินขาว</option>
+              <option value="openhouse">🎓 เปิดบ้านวิชาการ</option>
+              <option value="sparkles">✨ วิ้งวับน่ารัก</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input id="custom-caption-input" type="text" value="#SPTOpenHouse2027 💙🤍" oninput="renderPhotoboothPreview()" placeholder="ข้อความท้ายแผ่น..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-semibold text-slate-800" />
+          <label class="px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold cursor-pointer shrink-0">
+            🖼️ กรอบ PNG
+            <input type="file" accept="image/png,image/webp" onchange="handleCustomOverlayUpload(event)" class="hidden" />
+          </label>
+          <button id="clear-overlay-btn" type="button" onclick="clearCustomOverlay()" class="hidden px-2 py-1 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-bold cursor-pointer">
+            ลบกรอบ
+          </button>
+        </div>
+      </div>
+
+      <!-- Result Strip Preview + Direct Cloud QR Card -->
+      <div class="glass-card rounded-2xl p-3 border border-blue-100 flex-1 min-h-0 shadow-md">
+        <div class="grid grid-cols-12 gap-3 h-full items-center">
+          <!-- Rendered Photobooth Strip Column -->
+          <div class="col-span-6 h-full bg-slate-100/90 rounded-2xl border border-slate-200 p-2 flex items-center justify-center overflow-hidden">
+            <canvas id="result-canvas" class="max-h-full max-w-full w-auto h-auto rounded-lg shadow-lg object-contain"></canvas>
+          </div>
+
+          <!-- QR Code & Download Column -->
+          <div class="col-span-6 h-full flex flex-col items-center justify-between text-center py-1 overflow-y-auto">
+            <div class="w-full">
+              <div id="qr-status-header" class="text-[11px] font-bold text-blue-700 mb-1.5 flex items-center justify-center gap-1">
+                <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+                <span>สแกน QR เข้าค้นหารหัส นร.</span>
+              </div>
+
+              <!-- Single Permanent Booth QR Code Box -->
+              <div class="flex justify-center">
+                <div id="qrContainer" class="qr-safe-box w-[156px] h-[156px]"></div>
+              </div>
+
+              <!-- Host Status & Live URL Warning -->
+              <div id="qr-host-warning" class="hidden mt-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-300 text-[10px] font-semibold text-amber-800 leading-snug">
+                ⚠️ โหมดพรีวิว: ต้องนำไฟล์ขึ้นเว็บจริง (เช่น <b>tiiny.host</b>) ก่อน มือถือจึงจะสแกนเข้าได้
+              </div>
+
+              <!-- Status & Direct Album Link -->
+              <div id="qr-sync-status" class="mt-1 text-[11px] font-bold text-emerald-700 px-1 leading-tight">
+                สแกนแล้วพิมพ์รหัส นร. เพื่อรับรูป
+              </div>
+              <a id="qr-direct-link-preview" href="#" target="_blank" class="mt-0.5 inline-block text-[10px] font-bold text-blue-600 underline truncate max-w-[185px]">
+                เปิดหน้าอัลบั้มค้นหารหัส นร.
+              </a>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="w-full flex flex-col gap-1.5 mt-2">
+              <button id="download-btn" type="button" onclick="downloadCurrentPhoto()" disabled class="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>บันทึกรูปลงเครื่องนี้</span>
+              </button>
+
+              <div class="grid grid-cols-2 gap-1.5">
+                <button id="copy-photo-link-btn" type="button" onclick="copyCurrentPhotoLink()" class="py-1.5 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer">
+                  <i data-lucide="link" class="w-3 h-3"></i>
+                  <span>คัดลอกลิงก์อัลบั้ม</span>
+                </button>
+                <button type="button" onclick="switchAppMode('album')" class="py-1.5 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer">
+                  <i data-lucide="shield-check" class="w-3 h-3"></i>
+                  <span>ค้นหารหัส นร.</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- VIEW 2: PRIVATE STUDENT ALBUM (ค้นหาด้วยรหัส นร. — สงวนสิทธิ์เฉพาะเจ้าของ) -->
+  <!-- ===================================================================== -->
+  <section id="album-view" class="hidden flex-1 w-full max-w-4xl mx-auto p-3 sm:p-6 flex flex-col gap-4 overflow-y-auto">
+    <div class="glass-card rounded-3xl p-5 sm:p-7 border-2 border-blue-200 text-center shadow-xl">
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold mb-2">
+        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+        <span>อัลบั้มรับรูปส่วนบุคคล • เปิดบ้านสตรีพัทลุง 2027</span>
+      </div>
+      <h2 class="font-display font-extrabold text-xl sm:text-2xl text-slate-900">
+        ค้นหารูปถ่ายของคุณด้วยรหัสนักเรียน
+      </h2>
+      <p class="text-xs sm:text-sm text-slate-600 mt-1">
+        กรอกเลขประจำตัวนักเรียนของคุณเพื่อดูและดาวน์โหลดรูปถ่าย (ระบบสงวนสิทธิ์แสดงเฉพาะรูปของรหัสที่กรอกเท่านั้น)
+      </p>
+
+      <div class="mt-4 max-w-md mx-auto flex gap-2">
+        <input id="album-student-search-input" type="text" maxlength="24" placeholder="พิมพ์เลขประจำตัวนักเรียน เช่น 67105" onkeydown="if(event.key==='Enter') searchPrivateStudentAlbum()" class="flex-1 px-4 py-3 rounded-2xl bg-white border-2 border-blue-300 text-sm sm:text-base font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <button type="button" onclick="searchPrivateStudentAlbum()" class="px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition flex items-center gap-1.5 cursor-pointer">
+          <i data-lucide="search" class="w-4 h-4"></i>
+          <span>ค้นหา</span>
+        </button>
+      </div>
+
+      <div id="album-search-feedback" class="mt-3 text-xs font-medium text-slate-500">
+        กรุณากรอกเลขประจำตัวนักเรียนด้านบนเพื่อแสดงรูปถ่ายของคุณ
+      </div>
+    </div>
+
+    <div id="album-private-results" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-6"></div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- VIEW 3: LIVE LATEST-PHOTO MONITOR (จอ Monitor แสดงรูปล่าสุด)           -->
+  <!-- ===================================================================== -->
+  <section id="monitor-view" class="hidden flex-1 w-full max-w-[1500px] mx-auto p-3 sm:p-5 flex flex-col gap-4 overflow-y-auto">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+      <!-- Left: Large Latest Photo Display -->
+      <div class="lg:col-span-7 glass-card rounded-3xl p-4 sm:p-6 border border-blue-200 flex flex-col items-center justify-center bg-white/95 shadow-lg">
+        <div class="w-full flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="px-3 py-1 rounded-full bg-blue-600 text-white font-mono font-bold text-xs" id="monitor-hero-code">SPT-001</span>
+            <span class="text-xs font-semibold text-slate-500" id="monitor-hero-time">SPT OPENHOUSE 2027</span>
+          </div>
+          <button type="button" onclick="syncFromCloudNow(true)" class="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1 cursor-pointer">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>ซิงค์ล่าสุด</span>
+          </button>
+        </div>
+
+        <div class="w-full flex-1 min-h-[340px] max-h-[540px] bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center p-3 overflow-hidden">
+          <div id="monitor-empty-state" class="text-center text-slate-400 p-6">
+            <i data-lucide="image" class="w-12 h-12 mx-auto mb-2 opacity-40"></i>
+            <p class="text-sm font-bold">รอภาพถ่ายล่าสุดจากบูธ...</p>
+          </div>
+          <img id="monitor-hero-img" src="" alt="Latest Photobooth Strip" class="hidden max-h-[500px] w-auto rounded-xl shadow-xl object-contain" />
+        </div>
+      </div>
+
+      <!-- Right: QR Code & Actions for Latest Photo -->
+      <div class="lg:col-span-5 glass-card rounded-3xl p-5 sm:p-6 border-2 border-blue-200 flex flex-col items-center justify-between text-center bg-white/95 shadow-lg">
+        <div>
+          <div class="text-xs font-extrabold uppercase tracking-wider text-blue-600 mb-1">สแกน QR Code แล้วพิมพ์รหัสนักเรียน</div>
+          <h3 id="monitor-hero-student" class="text-xl sm:text-2xl font-display font-extrabold text-slate-900">รหัสนักเรียน: -</h3>
+        </div>
+
+        <div class="my-4 p-4 bg-white rounded-3xl border-2 border-blue-100 shadow-inner flex flex-col items-center">
+          <div id="monitorQrContainer" class="w-[180px] h-[180px] flex items-center justify-center"></div>
+          <a id="monitor-direct-link-preview" href="#" target="_blank" class="mt-2 text-xs font-bold text-blue-600 underline max-w-[230px] truncate">เปิดหน้าอัลบั้มรับรูป</a>
+        </div>
+
+        <p id="monitor-qr-caption" class="text-xs text-slate-600 max-w-xs mb-4">
+          สแกน QR Code ประจำจุดนี้ แล้วกรอกเลขประจำตัวนักเรียนของคุณเพื่อรับรูปถ่าย
+        </p>
+
+        <div class="w-full grid grid-cols-2 gap-2.5">
+          <button id="monitor-download-btn" type="button" disabled onclick="if(APP_STATE.monitorSelectedRecord) triggerImageDownload(APP_STATE.monitorSelectedRecord.dataUrl || APP_STATE.monitorSelectedRecord.cloudUrl, APP_STATE.monitorSelectedRecord.code + '_SPT2027.jpg')" class="py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>บันทึกรูปนี้</span>
+          </button>
+          <button id="monitor-copy-btn" type="button" onclick="copyCurrentPhotoLink()" class="py-3 px-4 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer">
+            <i data-lucide="copy" class="w-4 h-4"></i>
+            <span>คัดลอกลิงก์อัลบั้ม</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Recent Strip -->
+    <div class="glass-card rounded-2xl p-3.5 border border-blue-100 bg-white/90">
+      <div class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+        <i data-lucide="history" class="w-3.5 h-3.5 text-blue-600"></i>
+        <span>ภาพถ่ายล่าสุด — คลิกเพื่อสลับแสดงบนจอ</span>
+      </div>
+      <div id="monitor-recent-strip" class="flex items-center gap-2.5 overflow-x-auto pb-1"></div>
+    </div>
+  </section>
+
+  <!-- Cloud & Public Domain Settings Modal -->
+  <div id="cloud-settings-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 border border-blue-100 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-display font-extrabold text-lg text-slate-900">ตั้งค่าซิงค์อัลบั้ม & โดเมนเว็บจริง</h3>
+        <button type="button" onclick="document.getElementById('cloud-settings-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer">✕</button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">ลิงก์เว็บจริงที่อัปโหลดแล้ว (ไม่บังคับ)</label>
+          <input id="settings-public-url-input" type="url" placeholder="เช่น https://spt-booth.tiiny.site (เว้นว่างเพื่อใช้ลิงก์รูปตรง)" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900" />
+          <p class="text-[11px] text-slate-500 mt-1">หากเว้นว่าง ระบบจะสร้าง QR Code ลิงก์ตรงไปยังไฟล์รูปภาพบนคลาวด์ทันที (สแกนจากหน้า Preview ได้เลย)</p>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">รหัสห้องงาน (Event Room ID)</label>
+          <input id="settings-room-input" type="text" value="SPT-OPENHOUSE-2027" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 font-semibold" />
+        </div>
+        <button type="button" onclick="saveCloudSettings()" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm cursor-pointer">
+          บันทึกการตั้งค่า
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <script>
+    // =========================================================================
+    // 1. GLOBAL STATE & SAFE HELPERS
+    // =========================================================================
+    const APP_STATE = {
+      mode: 'booth',
+      eventRoom: localStorage.getItem('spt_event_room') || 'SPT-OPENHOUSE-2027',
+      publicBaseUrl: localStorage.getItem('spt_public_base_url') || '',
+      stream: null,
+      demoMode: false,
+      demoAnimId: null,
+      mirror: true,
+      timerSec: 3,
+      layout: 'strip4',
+      frameTheme: 'sptBlue',
+      filter: 'none',
+      stickerPack: 'none',
+      customOverlayImg: null,
+      capturedShots: [],
+      isCapturing: false,
+      photos: [],
+      currentPhotoRecord: null,
+      monitorSelectedRecord: null,
+      nextSequenceNum: 1,
+      uploadCounter: 0
+    };
+
+    const FRAME_THEMES = {
+      sptBlue: {
+        bgTop: '#0f2966',
+        bgMid: '#dbeafe',
+        bgBottom: '#ffffff',
+        footerBg: '#1e3a8a',
+        border: '#2563eb',
+        textMain: '#ffffff',
+        textSub: '#bfdbfe'
+      },
+      cleanWhite: {
+        bgTop: '#ffffff',
+        bgMid: '#f8fafc',
+        bgBottom: '#ffffff',
+        footerBg: '#0f172a',
+        border: '#cbd5e1',
+        textMain: '#ffffff',
+        textSub: '#cbd5e1'
+      },
+      pastelSky: {
+        bgTop: '#e0f2fe',
+        bgMid: '#f0f9ff',
+        bgBottom: '#bae6fd',
+        footerBg: '#0284c7',
+        border: '#7dd3fc',
+        textMain: '#ffffff',
+        textSub: '#e0f2fe'
+      },
+      vintageCream: {
+        bgTop: '#fef3c7',
+        bgMid: '#fffbeb',
+        bgBottom: '#fde68a',
+        footerBg: '#78350f',
+        border: '#f59e0b',
+        textMain: '#fef3c7',
+        textSub: '#fde68a'
+      },
+      darkGold: {
+        bgTop: '#090d16',
+        bgMid: '#1e293b',
+        bgBottom: '#0f172a',
+        footerBg: '#090d16',
+        border: '#eab308',
+        textMain: '#fde047',
+        textSub: '#fef08a'
+      }
+    };
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const el = document.createElement('div');
+      const colorCls = type === 'success'
+        ? 'bg-emerald-600 text-white'
+        : type === 'error'
+          ? 'bg-rose-600 text-white'
+          : 'bg-slate-900 text-white';
+      el.className = `${colorCls} px-4 py-2.5 rounded-2xl text-xs font-bold shadow-xl transition-opacity duration-300`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+      }, 3000);
+    }
+
+    function copyTextToClipboard(text) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e) {}
+    }
+
+    async function triggerImageDownload(dataUrl, filename) {
+      if (!dataUrl) return;
+      try {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      } catch (e) {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    }
+
+    function playBeep(high = false) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(high ? 1046 : 587, ctx.currentTime);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+      } catch (e) {}
+    }
+
+    function playShutterAudio() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(920, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.32, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.13);
+      } catch (e) {}
+    }
+
+    function triggerScreenFlash() {
+      const flash = document.getElementById('flash-overlay');
+      if (!flash) return;
+      flash.classList.remove('flash-active');
+      void flash.offsetWidth;
+      flash.classList.add('flash-active');
+    }
+
+    function openCloudSettingsModal() {
+      const modal = document.getElementById('cloud-settings-modal');
+      if (!modal) return;
+      document.getElementById('settings-public-url-input').value = APP_STATE.publicBaseUrl;
+      document.getElementById('settings-room-input').value = APP_STATE.eventRoom;
+      modal.classList.remove('hidden');
+    }
+
+    function saveCloudSettings() {
+      APP_STATE.publicBaseUrl = document.getElementById('settings-public-url-input').value.trim().replace(/\/$/, '');
+      APP_STATE.eventRoom = document.getElementById('settings-room-input').value.trim() || 'SPT-OPENHOUSE-2027';
+      localStorage.setItem('spt_public_base_url', APP_STATE.publicBaseUrl);
+      localStorage.setItem('spt_event_room', APP_STATE.eventRoom);
+      document.getElementById('cloud-settings-modal').classList.add('hidden');
+      initSingleBoothAlbumQR();
+      showToast('บันทึกการตั้งค่าและอัปเดต QR เรียบร้อย', 'success');
+    }
+
+    function getSingleAlbumEntryUrl() {
+      const rawHref = window.location.href || '';
+      const isRealHttp = rawHref.startsWith('http://') || rawHref.startsWith('https://');
+      const warnEl = document.getElementById('qr-host-warning');
+
+      if (!APP_STATE.publicBaseUrl && !isRealHttp) {
+        if (warnEl) warnEl.classList.remove('hidden');
+        return `https://tiiny.host/?note=upload-index-html-first&room=${encodeURIComponent(APP_STATE.eventRoom)}`;
+      }
+      if (warnEl) warnEl.classList.add('hidden');
+      const base = APP_STATE.publicBaseUrl || rawHref.split('?')[0];
+      return `${base}?album=1&room=${encodeURIComponent(APP_STATE.eventRoom)}`;
+    }
+
+    // =========================================================================
+    // 2. INDEXEDDB PERSISTENT STORAGE
+    // =========================================================================
+    const DB_NAME = 'SPT_Photobooth_2027_DB';
+    const STORE_NAME = 'photos';
+
+    function openPhotoDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'uid' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function savePhotoToIndexedDB(record) {
+      try {
+        const db = await openPhotoDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          tx.objectStore(STORE_NAME).put(record);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {}
+    }
+
+    function initSingleBoothAlbumQR() {
+      const albumUrl = getSingleAlbumEntryUrl();
+      renderSingleCleanQR('qrContainer', albumUrl, 164);
+      renderSingleCleanQR('monitorQrContainer', albumUrl, 180);
+
+      const linkEl = document.getElementById('qr-direct-link-preview');
+      if (linkEl) {
+        linkEl.href = albumUrl;
+        linkEl.textContent = albumUrl.replace(/^https?:\/\//, '');
+        linkEl.classList.remove('hidden');
+      }
+      const monLinkEl = document.getElementById('monitor-direct-link-preview');
+      if (monLinkEl) {
+        monLinkEl.href = albumUrl;
+        monLinkEl.textContent = albumUrl.replace(/^https?:\/\//, '');
+        monLinkEl.classList.remove('hidden');
+      }
+    }
+
+    async function loadPhotosFromIndexedDB() {
+      try {
+        const db = await openPhotoDB();
+        const items = await new Promise((resolve) => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const req = tx.objectStore(STORE_NAME).getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => resolve([]);
+        });
+        items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        APP_STATE.photos = items;
+        let maxSeq = 0;
+        items.forEach(item => {
+          const m = String(item.code || '').match(/(\d+)$/);
+          if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+        });
+        APP_STATE.nextSequenceNum = Math.max(APP_STATE.nextSequenceNum, maxSeq + 1);
+        updateNextCodePill();
+        return items;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function updateNextCodePill() {
+      const pill = document.getElementById('next-code-pill');
+      if (pill) {
+        pill.textContent = `SPT-${String(APP_STATE.nextSequenceNum).padStart(3, '0')}`;
+      }
+    }
+
+    function updateGalleryBadges() {
+      const badge = document.getElementById('gallery-count-badge');
+      if (badge) badge.textContent = APP_STATE.photos.length;
+    }
+
+    // =========================================================================
+    // 4. CAMERA & DEMO STREAM MANAGEMENT
+    // =========================================================================
+    async function refreshCameraDevices() {
+      const select = document.getElementById('camera-select');
+      if (!select) return;
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          select.innerHTML = '<option value="">ใช้โหมดจำลองภาพ</option>';
+          return;
+        }
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        const prev = select.value;
+        select.innerHTML = '';
+
+        if (videoInputs.length === 0) {
+          select.innerHTML = '<option value="">ไม่พบกล้อง (ใช้โหมดจำลอง)</option>';
+          return;
+        }
+
+        videoInputs.forEach((dev, i) => {
+          const opt = document.createElement('option');
+          opt.value = dev.deviceId;
+          opt.textContent = dev.label || `กล้องตัวที่ ${i + 1}`;
+          select.appendChild(opt);
+        });
+
+        if (prev && [...select.options].some(o => o.value === prev)) {
+          select.value = prev;
+        }
+      } catch (e) {
+        select.innerHTML = '<option value="">รอสิทธิ์กล้อง</option>';
+      }
+    }
+
+    async function startCameraStream(deviceId = '') {
+      stopDemoCamera();
+      if (APP_STATE.stream) {
+        APP_STATE.stream.getTracks().forEach(t => t.stop());
+        APP_STATE.stream = null;
+      }
+
+      const video = document.getElementById('camera-video');
+      const fallback = document.getElementById('camera-fallback');
+
+      const constraints = {
+        audio: false,
+        video: deviceId
+          ? { deviceId: { ideal: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { width: { ideal: 1280 }, height: { ideal: 720 } }
+      };
+
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('No mediaDevices');
+        }
+        const stream = await Promise.race([
+          navigator.mediaDevices.getUserMedia(constraints),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), 4500))
+        ]);
+        APP_STATE.stream = stream;
+        video.srcObject = stream;
+        await video.play();
+        video.classList.remove('hidden');
+        fallback.classList.add('hidden');
+        await refreshCameraDevices();
+
+        const track = stream.getVideoTracks()[0];
+        if (track && track.getSettings().deviceId) {
+          document.getElementById('camera-select').value = track.getSettings().deviceId;
+        }
+      } catch (e) {
+        fallback.classList.remove('hidden');
+      }
+    }
+
+    function activateDemoCamera() {
+      if (APP_STATE.stream) {
+        APP_STATE.stream.getTracks().forEach(t => t.stop());
+        APP_STATE.stream = null;
+      }
+      APP_STATE.demoMode = true;
+      document.getElementById('camera-fallback').classList.add('hidden');
+      document.getElementById('camera-video').classList.add('hidden');
+      const canvas = document.getElementById('demo-canvas');
+      canvas.classList.remove('hidden');
+      canvas.width = 960;
+      canvas.height = 720;
+      const ctx = canvas.getContext('2d');
+
+      let frame = 0;
+      function loop() {
+        if (!APP_STATE.demoMode) return;
+        frame++;
+        const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        grad.addColorStop(0, '#1e3a8a');
+        grad.addColorStop(0.5, '#2563eb');
+        grad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.beginPath();
+        ctx.arc(480 + Math.sin(frame * 0.04) * 150, 350 + Math.cos(frame * 0.03) * 60, 120, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 40px Kanit, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('📸 DEMO STUDIO CAMERA', 480, 320);
+        ctx.font = '24px Kanit, sans-serif';
+        ctx.fillStyle = '#bfdbfe';
+        ctx.fillText('เปิดบ้านสตรีพัทลุง SPT OPENHOUSE 2027', 480, 370);
+        ctx.fillText(new Date().toLocaleTimeString('th-TH'), 480, 415);
+
+        APP_STATE.demoAnimId = requestAnimationFrame(loop);
+      }
+      loop();
+      showToast('เปิดโหมดจำลองภาพ (Demo) เรียบร้อย', 'success');
+    }
+
+    function stopDemoCamera() {
+      APP_STATE.demoMode = false;
+      if (APP_STATE.demoAnimId) cancelAnimationFrame(APP_STATE.demoAnimId);
+      const canvas = document.getElementById('demo-canvas');
+      if (canvas) canvas.classList.add('hidden');
+    }
+
+    function toggleCameraMirror() {
+      APP_STATE.mirror = !APP_STATE.mirror;
+      const video = document.getElementById('camera-video');
+      if (video) {
+        video.style.transform = APP_STATE.mirror ? 'scaleX(-1)' : 'scaleX(1)';
+      }
+    }
+
+    function getCssFilterString() {
+      if (APP_STATE.filter === 'bright') return 'brightness(1.1) contrast(1.04) saturate(1.12)';
+      if (APP_STATE.filter === 'warm') return 'sepia(0.18) saturate(1.25) brightness(1.04)';
+      if (APP_STATE.filter === 'bw') return 'grayscale(1) contrast(1.15)';
+      return 'none';
+    }
+
+    function setCameraFilter(val) {
+      APP_STATE.filter = val;
+      const video = document.getElementById('camera-video');
+      if (video) video.style.filter = getCssFilterString();
+      renderPhotoboothPreview();
+    }
+
+    function setFrameTheme(val) {
+      APP_STATE.frameTheme = val;
+      renderPhotoboothPreview();
+    }
+
+    function setStickerPack(val) {
+      APP_STATE.stickerPack = val;
+      renderPhotoboothPreview();
+    }
+
+    function handleCustomOverlayUpload(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          APP_STATE.customOverlayImg = img;
+          document.getElementById('clear-overlay-btn')?.classList.remove('hidden');
+          renderPhotoboothPreview();
+          showToast('อัปโหลดกรอบ PNG เรียบร้อย', 'success');
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearCustomOverlay() {
+      APP_STATE.customOverlayImg = null;
+      document.getElementById('clear-overlay-btn')?.classList.add('hidden');
+      renderPhotoboothPreview();
+    }
+
+    // =========================================================================
+    // 5. LAYOUT, CAPTURE & PHOTOBOOTH TEMPLATE RENDERER
+    // =========================================================================
+    function getRequiredShotsForLayout() {
+      if (APP_STATE.layout === 'single') return 1;
+      if (APP_STATE.layout === 'strip3') return 3;
+      return 4;
+    }
+
+    function setPhotoboothLayout(layoutKey) {
+      APP_STATE.layout = layoutKey;
+      document.querySelectorAll('.layout-choice').forEach(btn => {
+        if (btn.dataset.layout === layoutKey) {
+          btn.className = 'layout-choice px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold bg-blue-600 text-white shadow-2xs cursor-pointer';
+        } else {
+          btn.className = 'layout-choice px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-slate-700 hover:bg-white cursor-pointer';
+        }
+      });
+      const count = getRequiredShotsForLayout();
+      const shutterText = document.getElementById('shutter-btn-text');
+      if (shutterText) {
+        shutterText.textContent = count === 1 ? 'ถ่ายภาพ (1 รูป)' : `ถ่ายภาพ (${count} รูป)`;
+      }
+      updateMiniShotsBar();
+      renderPhotoboothPreview();
+    }
+
+    function updateMiniShotsBar() {
+      const bar = document.getElementById('mini-shots-bar');
+      if (!bar) return;
+      const count = getRequiredShotsForLayout();
+      bar.className = `absolute bottom-3 left-3 right-3 grid grid-cols-${count} gap-2 z-10 pointer-events-none`;
+      bar.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const shot = APP_STATE.capturedShots[i];
+        const slot = document.createElement('div');
+        slot.className = 'h-14 sm:h-16 rounded-xl bg-slate-900/80 border border-white/25 overflow-hidden flex items-center justify-center backdrop-blur-xs';
+        slot.innerHTML = shot
+          ? `<img src="${shot}" class="w-full h-full object-cover" />`
+          : `<span class="text-[11px] font-bold text-white/70">#${i + 1}</span>`;
+        bar.appendChild(slot);
+      }
+    }
+
+    function resetCurrentShots() {
+      APP_STATE.capturedShots = [];
+      updateMiniShotsBar();
+      renderPhotoboothPreview();
+    }
+
+    function captureSingleFrameFromSource() {
+      const temp = document.createElement('canvas');
+      if (APP_STATE.demoMode) {
+        const demo = document.getElementById('demo-canvas');
+        temp.width = demo.width;
+        temp.height = demo.height;
+        const ctx = temp.getContext('2d');
+        ctx.filter = getCssFilterString();
+        ctx.drawImage(demo, 0, 0);
+        return temp.toDataURL('image/jpeg', 0.9);
+      }
+
+      const video = document.getElementById('camera-video');
+      temp.width = video.videoWidth || 1280;
+      temp.height = video.videoHeight || 720;
+      const ctx = temp.getContext('2d');
+      ctx.filter = getCssFilterString();
+      if (APP_STATE.mirror) {
+        ctx.translate(temp.width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, 0, 0, temp.width, temp.height);
+      return temp.toDataURL('image/jpeg', 0.9);
+    }
+
+    function draw3DSptHeader(ctx, cx, y, maxW) {
+      ctx.save();
+      ctx.translate(cx, y);
+      ctx.rotate(-0.03);
+      const scale = Math.min(1, maxW / 540);
+      ctx.scale(scale, scale);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      ctx.font = '800 50px Prompt, Kanit, sans-serif';
+      for (let d = 6; d >= 1; d--) {
+        ctx.fillStyle = '#1e3a8a';
+        ctx.fillText('เปิดบ้านสตรีพัทลุง', d * 0.8, d * 1.1);
+      }
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#1d4ed8';
+      ctx.strokeText('เปิดบ้านสตรีพัทลุง', 0, 0);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('เปิดบ้านสตรีพัทลุง', 0, 0);
+
+      ctx.font = '800 32px Chakra Petch, Prompt, sans-serif';
+      for (let d = 4; d >= 1; d--) {
+        ctx.fillStyle = '#1e3a8a';
+        ctx.fillText('SPT OPENHOUSE 2027', d * 0.8, 44 + d * 1.0);
+      }
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#1d4ed8';
+      ctx.strokeText('SPT OPENHOUSE 2027', 0, 44);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('SPT OPENHOUSE 2027', 0, 44);
+
+      ctx.restore();
+    }
+
+    async function renderPhotoboothPreview(photoCode = 'PREVIEW', studentId = '') {
+      const canvas = document.getElementById('result-canvas');
+      if (!canvas) return '';
+
+      let geo = { w: 600, h: 1760, head: 155, foot: 145, pad: 36, gap: 22, cols: 1, rows: 4 };
+      if (APP_STATE.layout === 'strip3') {
+        geo = { w: 600, h: 1420, head: 155, foot: 145, pad: 36, gap: 22, cols: 1, rows: 3 };
+      } else if (APP_STATE.layout === 'grid2x2') {
+        geo = { w: 1160, h: 1480, head: 175, foot: 145, pad: 44, gap: 26, cols: 2, rows: 2 };
+      } else if (APP_STATE.layout === 'single') {
+        geo = { w: 1040, h: 1320, head: 175, foot: 150, pad: 50, gap: 0, cols: 1, rows: 1 };
+      }
+
+      canvas.width = geo.w;
+      canvas.height = geo.h;
+      const ctx = canvas.getContext('2d');
+      const theme = FRAME_THEMES[APP_STATE.frameTheme] || FRAME_THEMES.sptBlue;
+
+      const grad = ctx.createLinearGradient(0, 0, 0, geo.h);
+      grad.addColorStop(0, theme.bgTop);
+      grad.addColorStop(0.35, theme.bgMid);
+      grad.addColorStop(1, theme.bgBottom);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, geo.w, geo.h);
+
+      ctx.fillStyle = theme.footerBg;
+      ctx.beginPath();
+      ctx.moveTo(0, geo.h - geo.foot + 10);
+      ctx.quadraticCurveTo(geo.w / 2, geo.h - geo.foot - 28, geo.w, geo.h - geo.foot + 10);
+      ctx.lineTo(geo.w, geo.h);
+      ctx.lineTo(0, geo.h);
+      ctx.closePath();
+      ctx.fill();
+
+      draw3DSptHeader(ctx, geo.w / 2, 68, geo.w - 60);
+
+      const total = geo.cols * geo.rows;
+      const slotW = (geo.w - geo.pad * 2 - geo.gap * (geo.cols - 1)) / geo.cols;
+      const slotH = (geo.h - geo.head - geo.foot - geo.gap * (geo.rows - 1)) / geo.rows;
+
+      for (let i = 0; i < total; i++) {
+        const c = i % geo.cols;
+        const r = Math.floor(i / geo.cols);
+        const x = geo.pad + c * (slotW + geo.gap);
+        const y = geo.head + r * (slotH + geo.gap);
+
+        const shot = APP_STATE.capturedShots[i];
+        if (shot) {
+          await new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const ir = img.width / img.height;
+              const sr = slotW / slotH;
+              let sx = 0, sy = 0, sw = img.width, sh = img.height;
+              if (ir > sr) {
+                sw = img.height * sr;
+                sx = (img.width - sw) / 2;
+              } else {
+                sh = img.width / sr;
+                sy = (img.height - sh) / 2;
+              }
+              ctx.drawImage(img, sx, sy, sw, sh, x, y, slotW, slotH);
+              resolve();
+            };
+            img.onerror = resolve;
+            img.src = shot;
+          });
+        } else {
+          ctx.fillStyle = '#e2e8f0';
+          ctx.fillRect(x, y, slotW, slotH);
+          ctx.fillStyle = '#64748b';
+          ctx.font = 'bold 26px Kanit, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`ช่องภาพที่ ${i + 1}`, x + slotW / 2, y + slotH / 2);
+        }
+
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = theme.border;
+        ctx.strokeRect(x, y, slotW, slotH);
+      }
+
+      if (APP_STATE.customOverlayImg) {
+        ctx.drawImage(APP_STATE.customOverlayImg, 0, 0, geo.w, geo.h);
+      }
+
+      if (APP_STATE.stickerPack !== 'none') {
+        const packMap = {
+          sptHearts: ['💙', '🤍', '💙', '🤍'],
+          openhouse: ['🎓', '🏫', '📚', '🌟'],
+          sparkles: ['✨', '💫', '💖', '🎀']
+        };
+        const icons = packMap[APP_STATE.stickerPack] || [];
+        ctx.font = '56px serif';
+        ctx.textAlign = 'center';
+        if (icons[0]) ctx.fillText(icons[0], 58, 60);
+        if (icons[1]) ctx.fillText(icons[1], geo.w - 58, 60);
+        if (icons[2]) ctx.fillText(icons[2], 62, geo.h - geo.foot - 20);
+        if (icons[3]) ctx.fillText(icons[3], geo.w - 62, geo.h - geo.foot - 20);
+      }
+
+      const caption = document.getElementById('custom-caption-input')?.value || '#SPTOpenHouse2027 💙🤍';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = theme.textMain;
+      ctx.font = 'bold 28px Kanit, sans-serif';
+      ctx.fillText(caption, geo.w / 2, geo.h - 62);
+
+      ctx.fillStyle = theme.textSub;
+      ctx.font = '20px Kanit, sans-serif';
+      const subMeta = `โรงเรียนสตรีพัทลุง • ${photoCode}${studentId ? ` • ID: ${studentId}` : ''}`;
+      ctx.fillText(subMeta, geo.w / 2, geo.h - 28);
+
+      return canvas.toDataURL('image/jpeg', 0.86);
+    }
+
+    async function uploadImageToPublicCloud(dataUrl) {
+      try {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `spt_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+        // Attempt 1: tmpfiles.org (supports direct browser CORS)
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const up = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: fd });
+          if (up.ok) {
+            const json = await up.json();
+            const rawUrl = json?.data?.url;
+            if (rawUrl) {
+              return rawUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+            }
+          }
+        } catch (e) {}
+
+        // Attempt 2: litterbox.catbox.moe via CORS relay
+        try {
+          const fd2 = new FormData();
+          fd2.append('reqtype', 'fileupload');
+          fd2.append('time', '72h');
+          fd2.append('fileToUpload', file);
+          const up2 = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://litterbox.catbox.moe/resources/internals/api.php'), {
+            method: 'POST',
+            body: fd2
+          });
+          if (up2.ok) {
+            const txt = (await up2.text()).trim();
+            if (txt.startsWith('https://')) return txt;
+          }
+        } catch (e) {}
+      } catch (e) {}
+      return '';
+    }
+
+    function getNtfyRoomTopic() {
+      const slug = String(APP_STATE.eventRoom || 'SPT-OPENHOUSE-2027')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '-');
+      return `spt-photobooth-album-${slug}`;
+    }
+
+    async function publishRecordToPublicRoom(record) {
+      if (!record.cloudUrl) return;
+      try {
+        const topic = getNtfyRoomTopic();
+        await fetch(`https://ntfy.sh/${topic}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: record.uid,
+            code: record.code,
+            studentId: record.studentId,
+            cloudUrl: record.cloudUrl,
+            timestamp: record.timestamp,
+            createdAt: record.createdAt,
+            room: record.room
+          })
+        });
+      } catch (e) {}
+    }
+
+    async function fetchRecordsFromPublicRoom() {
+      try {
+        const topic = getNtfyRoomTopic();
+        const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=24h`);
+        if (!res.ok) return [];
+        const text = await res.text();
+        const lines = text.trim().split('\n').filter(Boolean);
+        const list = [];
+        lines.forEach(line => {
+          try {
+            const evt = JSON.parse(line);
+            if (evt.event === 'message' && evt.message) {
+              const payload = JSON.parse(evt.message);
+              if (payload && payload.studentId && payload.cloudUrl) {
+                list.push(payload);
+              }
+            }
+          } catch (e) {}
+        });
+        return list;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    async function processAndPublishRecord(record) {
+      const statusEl = document.getElementById('qr-sync-status');
+      if (statusEl) statusEl.textContent = '⏳ กำลังซิงค์รูปเข้าอัลบั้มออนไลน์...';
+
+      const cloudUrl = await uploadImageToPublicCloud(record.dataUrl);
+      if (cloudUrl) {
+        record.cloudUrl = cloudUrl;
+        await savePhotoToIndexedDB(record);
+        await publishRecordToPublicRoom(record);
+        if (statusEl) statusEl.textContent = '✅ ซิงค์เข้าอัลบั้มออนไลน์เรียบร้อย';
+      } else {
+        if (statusEl) statusEl.textContent = '💾 บันทึกในเครื่องแล้ว (รอซิงค์)';
+      }
+
+      if (window.SptCloudAlbum) {
+        await window.SptCloudAlbum.savePhoto(record);
+      }
+      broadcastPhotoToMonitorTabs(record);
+    }
+
+    async function startPhotoboothCapture() {
+      if (APP_STATE.isCapturing) return;
+
+      // Enforce mandatory Student ID before starting countdown
+      const studentInput = document.getElementById('student-id-input');
+      const studentId = (studentInput?.value || '').trim();
+      if (!studentId) {
+        if (studentInput) {
+          studentInput.classList.remove('border-blue-300', 'bg-white');
+          studentInput.classList.add('border-rose-500', 'ring-2', 'ring-rose-400', 'bg-rose-50');
+          studentInput.focus();
+        }
+        showToast('⚠️ กรุณากรอกเลขรหัสนักเรียนก่อนกดถ่ายภาพ!', 'error');
+        return;
+      }
+
+      if (!APP_STATE.stream && !APP_STATE.demoMode) {
+        activateDemoCamera();
+      }
+
+      APP_STATE.isCapturing = true;
+      APP_STATE.capturedShots = [];
+      updateMiniShotsBar();
+
+      const total = getRequiredShotsForLayout();
+      const overlay = document.getElementById('countdown-overlay');
+      const numEl = document.getElementById('countdown-num');
+      const labelEl = document.getElementById('countdown-shot-label');
+      const btn = document.getElementById('shutter-btn');
+      btn.disabled = true;
+
+      for (let i = 0; i < total; i++) {
+        labelEl.textContent = `ช็อตที่ ${i + 1} / ${total}`;
+        overlay.classList.remove('hidden');
+
+        for (let t = APP_STATE.timerSec; t >= 1; t--) {
+          numEl.textContent = t;
+          playBeep(t === 1);
+          await new Promise(r => setTimeout(r, 900));
+        }
+
+        overlay.classList.add('hidden');
+        triggerScreenFlash();
+        playShutterAudio();
+
+        const frame = captureSingleFrameFromSource();
+        APP_STATE.capturedShots.push(frame);
+        updateMiniShotsBar();
+        await renderPhotoboothPreview('...');
+
+        if (i < total - 1) {
+          await new Promise(r => setTimeout(r, 700));
+        }
+      }
+
+      const code = `SPT-${String(APP_STATE.nextSequenceNum).padStart(3, '0')}`;
+      APP_STATE.nextSequenceNum++;
+      updateNextCodePill();
+
+      const finalDataUrl = await renderPhotoboothPreview(code, studentId);
+
+      const record = {
+        uid: `${code}_${Date.now()}`,
+        code: code,
+        studentId: studentId,
+        dataUrl: finalDataUrl,
+        cloudUrl: '',
+        timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        createdAt: Date.now(),
+        room: APP_STATE.eventRoom
+      };
+
+      APP_STATE.currentPhotoRecord = record;
+      APP_STATE.photos.unshift(record);
+      await savePhotoToIndexedDB(record);
+
+      if (window.SptCloudAlbum) {
+        window.SptCloudAlbum.savePhoto(record);
+      }
+
+      broadcastPhotoToMonitorTabs(record);
+      updateGalleryBadges();
+
+      const dlBtn = document.getElementById('download-btn');
+      if (dlBtn) dlBtn.disabled = false;
+
+      if (typeof confetti === 'function') {
+        confetti({ particleCount: 55, spread: 65, origin: { y: 0.7 } });
+      }
+
+      showToast(
+        `บันทึกภาพ ${code} (รหัส นร. ${studentId}) เรียบร้อย!`,
+        'success'
+      );
+
+      // Auto-clear Student ID for next student if enabled
+      const autoClearCb = document.getElementById('auto-clear-sid-checkbox');
+      if (autoClearCb && autoClearCb.checked && studentInput) {
+        studentInput.value = '';
+      }
+
+      btn.disabled = false;
+      APP_STATE.isCapturing = false;
+
+      // Upload & render QR Code immediately
+      await processAndPublishRecord(record);
+    }
+
+    function downloadCurrentPhoto() {
+      const rec = APP_STATE.currentPhotoRecord;
+      if (!rec) return;
+      triggerImageDownload(rec.dataUrl, `${rec.code}${rec.studentId ? '_' + rec.studentId : ''}_SPT2027.jpg`);
+    }
+
+    // =========================================================================
+    // 6. QR RENDERER & PRIVATE STUDENT ALBUM SEARCH
+    // =========================================================================
+    function renderSingleCleanQR(containerId, text, size = 164) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (typeof QRCode !== 'undefined') {
+        try {
+          new QRCode(container, {
+            text: text,
+            width: size,
+            height: size,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.L
+          });
+          const canvases = container.querySelectorAll('canvas');
+          const imgs = container.querySelectorAll('img');
+          if (imgs.length > 0 && canvases.length > 0) {
+            canvases.forEach(c => c.remove());
+          }
+          return;
+        } catch (e) {}
+      }
+
+      const fallbackImg = document.createElement('img');
+      fallbackImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=4&ecc=L&data=${encodeURIComponent(text)}`;
+      fallbackImg.alt = 'QR Code';
+      fallbackImg.width = size;
+      fallbackImg.height = size;
+      container.appendChild(fallbackImg);
+    }
+
+    function copyCurrentPhotoLink() {
+      const albumUrl = getSingleAlbumEntryUrl();
+      copyTextToClipboard(albumUrl);
+      showToast('คัดลอกลิงก์อัลบั้มค้นหารหัสนักเรียนเรียบร้อย', 'success');
+    }
+
+    function openSeparateAlbumWindow() {
+      const rawHref = window.location.href || '';
+      const isRealHttp = rawHref.startsWith('http://') || rawHref.startsWith('https://');
+      const base = APP_STATE.publicBaseUrl || (isRealHttp ? rawHref.split('?')[0] : '');
+      if (base) {
+        const win = window.open(`${base}?album=1&room=${encodeURIComponent(APP_STATE.eventRoom)}`, 'SPT_Private_Album', 'width=1024,height=780');
+        if (win) return;
+      }
+      switchAppMode('album');
+    }
+
+    async function searchPrivateStudentAlbum() {
+      const input = document.getElementById('album-student-search-input');
+      const feedback = document.getElementById('album-search-feedback');
+      const grid = document.getElementById('album-private-results');
+      if (!input || !feedback || !grid) return;
+
+      const query = input.value.trim().toLowerCase();
+      grid.innerHTML = '';
+
+      if (!query) {
+        feedback.className = 'mt-3 text-xs font-semibold text-amber-600';
+        feedback.textContent = '⚠️ กรุณากรอกเลขประจำตัวนักเรียนของคุณก่อนค้นหา (ระบบไม่แสดงรูปของรหัสอื่น)';
+        return;
+      }
+
+      feedback.className = 'mt-3 text-xs font-semibold text-blue-600';
+      feedback.textContent = '🔍 กำลังค้นหารูปถ่ายของคุณจากอัลบั้มออนไลน์...';
+
+      // Sync latest records from cross-device room before filtering
+      const remoteRecords = await fetchRecordsFromPublicRoom();
+      if (remoteRecords.length > 0) {
+        const map = new Map();
+        remoteRecords.forEach(r => map.set(r.uid || r.code, r));
+        APP_STATE.photos.forEach(p => map.set(p.uid || p.code, { ...map.get(p.uid || p.code), ...p }));
+        APP_STATE.photos = Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      }
+
+      const matched = APP_STATE.photos.filter(p => {
+        const sid = String(p.studentId || '').trim().toLowerCase();
+        return sid !== '' && sid === query;
+      });
+
+      if (matched.length === 0) {
+        feedback.className = 'mt-3 text-xs font-bold text-rose-600';
+        feedback.textContent = `ไม่พบรูปถ่ายของรหัสนักเรียน "${escapeHtml(input.value.trim())}" กรุณาตรวจสอบตัวเลขอีกครั้ง`;
+        return;
+      }
+
+      feedback.className = 'mt-3 text-xs font-bold text-emerald-700';
+      feedback.textContent = `พบรูปถ่ายของคุณทั้งหมด ${matched.length} ใบ (รหัสนักเรียน: ${escapeHtml(input.value.trim())})`;
+
+      matched.forEach(item => {
+        const imgSrc = item.dataUrl || item.cloudUrl;
+        const card = document.createElement('div');
+        card.className = 'glass-card rounded-3xl p-4 border-2 border-blue-200 flex flex-col items-center gap-3 shadow-lg';
+        card.innerHTML = `
+          <div class="w-full flex items-center justify-between">
+            <span class="px-2.5 py-0.5 rounded-full bg-blue-600 text-white font-mono text-xs font-bold">${escapeHtml(item.code)}</span>
+            <span class="text-xs font-bold text-slate-600">รหัส นร.: ${escapeHtml(item.studentId)}</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-2xl p-2 flex justify-center">
+            <img src="${imgSrc}" alt="${escapeHtml(item.code)}" class="max-h-[380px] w-auto rounded-xl shadow" />
+          </div>
+          <button type="button" class="dl-private-btn w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow flex items-center justify-center gap-2 cursor-pointer">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>บันทึกรูปลงเครื่อง (Save Photo)</span>
+          </button>
+        `;
+        card.querySelector('.dl-private-btn').addEventListener('click', () => {
+          triggerImageDownload(imgSrc, `${item.code}_${item.studentId}_SPT2027.jpg`);
+        });
+        grid.appendChild(card);
+      });
+
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    // =========================================================================
+    // 7. LIVE LATEST-PHOTO MONITOR SYSTEM
+    // =========================================================================
+    let boothChannel = null;
+    try {
+      boothChannel = new BroadcastChannel('spt_photobooth_live_channel');
+      boothChannel.onmessage = (ev) => {
+        if (ev.data?.type === 'NEW_PHOTO' && ev.data.record) {
+          handleIncomingLivePhoto(ev.data.record);
+        }
+      };
+    } catch (e) {}
+
+    function broadcastPhotoToMonitorTabs(record) {
+      try {
+        if (boothChannel) {
+          boothChannel.postMessage({ type: 'NEW_PHOTO', record });
+        }
+        localStorage.setItem('spt_latest_photo_ping', JSON.stringify({
+          uid: record.uid,
+          at: Date.now()
+        }));
+      } catch (e) {}
+    }
+
+    async function handleIncomingLivePhoto(record) {
+      if (!record || !record.uid) return;
+      const idx = APP_STATE.photos.findIndex(p => p.uid === record.uid);
+      if (idx >= 0) {
+        APP_STATE.photos[idx] = { ...APP_STATE.photos[idx], ...record };
+      } else {
+        APP_STATE.photos.unshift(record);
+      }
+      await savePhotoToIndexedDB(record);
+      updateGalleryBadges();
+      selectPhotoForMonitor(record);
+      renderMonitorRecentStrip();
+    }
+
+    window.addEventListener('storage', async (e) => {
+      if (e.key === 'spt_latest_photo_ping') {
+        await loadPhotosFromIndexedDB();
+        updateGalleryBadges();
+        if (APP_STATE.photos.length > 0) {
+          selectPhotoForMonitor(APP_STATE.photos[0]);
+          renderMonitorRecentStrip();
+        }
+      }
+    });
+
+    async function syncFromCloudNow(notify = false) {
+      await loadPhotosFromIndexedDB();
+      updateGalleryBadges();
+      if (APP_STATE.photos.length > 0) {
+        selectPhotoForMonitor(APP_STATE.monitorSelectedRecord || APP_STATE.photos[0]);
+        renderMonitorRecentStrip();
+      }
+      if (notify) showToast('ซิงค์ข้อมูลรูปล่าสุดเรียบร้อย', 'success');
+    }
+
+    function switchAppMode(mode) {
+      APP_STATE.mode = mode;
+      const boothView = document.getElementById('booth-view');
+      const albumView = document.getElementById('album-view');
+      const monitorView = document.getElementById('monitor-view');
+      const navBooth = document.getElementById('nav-booth-btn');
+      const navAlbum = document.getElementById('nav-album-btn');
+      const navMonitor = document.getElementById('nav-monitor-btn');
+
+      [navBooth, navAlbum, navMonitor].forEach(btn => {
+        if (!btn) return;
+        btn.classList.remove('bg-blue-600', 'text-white', 'shadow-xs');
+        btn.classList.add('text-blue-700');
+      });
+
+      boothView.classList.add('hidden');
+      albumView.classList.add('hidden');
+      monitorView.classList.add('hidden');
+
+      if (mode === 'album') {
+        albumView.classList.remove('hidden');
+        if (navAlbum) {
+          navAlbum.classList.add('bg-blue-600', 'text-white', 'shadow-xs');
+          navAlbum.classList.remove('text-blue-700');
+        }
+      } else if (mode === 'monitor') {
+        monitorView.classList.remove('hidden');
+        if (navMonitor) {
+          navMonitor.classList.add('bg-blue-600', 'text-white', 'shadow-xs');
+          navMonitor.classList.remove('text-blue-700');
+        }
+        if (APP_STATE.photos.length > 0) {
+          selectPhotoForMonitor(APP_STATE.monitorSelectedRecord || APP_STATE.photos[0]);
+        }
+        renderMonitorRecentStrip();
+      } else {
+        boothView.classList.remove('hidden');
+        if (navBooth) {
+          navBooth.classList.add('bg-blue-600', 'text-white', 'shadow-xs');
+          navBooth.classList.remove('text-blue-700');
+        }
+      }
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    function openSeparateMonitorWindow() {
+      const rawHref = window.location.href || '';
+      const base = APP_STATE.publicBaseUrl || (rawHref.startsWith('http') ? rawHref.split('?')[0] : '');
+      if (base) {
+        const win = window.open(`${base}?monitor=1&room=${encodeURIComponent(APP_STATE.eventRoom)}`, 'SPT_Monitor_Window', 'width=1280,height=800');
+        if (win) return;
+      }
+      switchAppMode('monitor');
+    }
+
+    function selectPhotoForMonitor(photo) {
+      if (!photo) return;
+      APP_STATE.monitorSelectedRecord = photo;
+
+      const imgEl = document.getElementById('monitor-hero-img');
+      const emptyEl = document.getElementById('monitor-empty-state');
+      const imgSrc = photo.dataUrl || photo.cloudUrl;
+
+      if (imgSrc && imgEl && emptyEl) {
+        imgEl.src = imgSrc;
+        imgEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+      }
+
+      document.getElementById('monitor-hero-code').textContent = photo.code;
+      document.getElementById('monitor-hero-time').textContent = photo.timestamp || 'SPT OPENHOUSE 2027';
+      document.getElementById('monitor-hero-student').textContent = photo.studentId
+        ? `รหัสนักเรียน: ${photo.studentId}`
+        : `ภาพถ่ายรหัส ${photo.code}`;
+
+      document.getElementById('monitor-download-btn').disabled = false;
+    }
+
+    function renderMonitorRecentStrip() {
+      const strip = document.getElementById('monitor-recent-strip');
+      if (!strip) return;
+      strip.innerHTML = '';
+
+      if (APP_STATE.photos.length === 0) {
+        strip.innerHTML = '<div class="text-xs text-slate-400 py-2">ยังไม่มีภาพถ่ายในเซสชันนี้</div>';
+        return;
+      }
+
+      APP_STATE.photos.slice(0, 20).forEach(item => {
+        const thumb = document.createElement('button');
+        thumb.type = 'button';
+        const isSelected = APP_STATE.monitorSelectedRecord?.uid === item.uid;
+        thumb.className = `shrink-0 w-24 rounded-xl overflow-hidden border-2 transition cursor-pointer ${isSelected ? 'border-blue-600 shadow-md scale-[1.02]' : 'border-slate-200 hover:border-blue-400'}`;
+        thumb.innerHTML = `
+          <img src="${item.dataUrl}" class="w-full h-24 object-cover object-top bg-slate-100" />
+          <div class="bg-slate-900 text-white text-[10px] font-mono font-bold py-0.5 text-center truncate px-1">
+            ${escapeHtml(item.code)}
+          </div>
+        `;
+        thumb.addEventListener('click', () => {
+          selectPhotoForMonitor(item);
+          renderMonitorRecentStrip();
+        });
+        strip.appendChild(thumb);
+      });
+    }
+
+    // =========================================================================
+    // 8. INITIALIZATION ON LOAD
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+
+      initSingleBoothAlbumQR();
+      await loadPhotosFromIndexedDB();
+      updateGalleryBadges();
+      updateMiniShotsBar();
+      await renderPhotoboothPreview('PREVIEW');
+
+      // Connect Built-in Cloud Album if available
+      const connectCloud = async () => {
+        if (!window.SptCloudAlbum) return;
+        const ok = await window.SptCloudAlbum.init();
+        if (ok) {
+          window.SptCloudAlbum.subscribeAll(async (cloudList) => {
+            const map = new Map();
+            cloudList.forEach(item => map.set(item.uid || item.code, item));
+            APP_STATE.photos.forEach(item => {
+              const prev = map.get(item.uid || item.code) || {};
+              map.set(item.uid || item.code, { ...prev, ...item });
+            });
+            APP_STATE.photos = Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+            let maxSeq = APP_STATE.nextSequenceNum - 1;
+            APP_STATE.photos.forEach(item => {
+              savePhotoToIndexedDB(item);
+              const m = String(item.code || '').match(/(\d+)$/);
+              if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+            });
+            APP_STATE.nextSequenceNum = Math.max(APP_STATE.nextSequenceNum, maxSeq + 1);
+            updateNextCodePill();
+            updateGalleryBadges();
+
+            if (APP_STATE.mode === 'monitor' && APP_STATE.photos.length > 0) {
+              selectPhotoForMonitor(APP_STATE.monitorSelectedRecord || APP_STATE.photos[0]);
+              renderMonitorRecentStrip();
+            }
+          });
+        }
+      };
+      connectCloud();
+      window.addEventListener('spt-cloud-album-ready', connectCloud);
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('room')) {
+        APP_STATE.eventRoom = params.get('room');
+      }
+      if (params.get('album') === '1') {
+        switchAppMode('album');
+        if (params.get('sid')) {
+          document.getElementById('album-student-search-input').value = params.get('sid');
+          searchPrivateStudentAlbum();
+        }
+      } else if (params.get('monitor') === '1') {
+        switchAppMode('monitor');
+      } else {
+        refreshCameraDevices();
+        startCameraStream();
+      }
+    });
+  </script>
+</body>
+</html>
